@@ -1,0 +1,47 @@
+# GitHub Actions Runner — Docker Compose
+#
+# 환경변수 (.env):
+#   GITHUB_NAME     — GitHub name/owner (기본값: abyss-works)
+#   RUNNER_TOKEN   — 첫 등록용 1회용 토큰
+#
+# 첫 실행: GITHUB_NAME=... RUNNER_TOKEN=... dc up -d
+# 그 이후: dc up -d (runner-home volume에 credentials 유지)
+#
+# RUNNER_TOKEN 발급 (1회용):
+#   echo "RUNNER_TOKEN=$(gh api --method POST /repos/${GITHUB_NAME:-abyss-works}/used-book/actions/runners/registration-token --jq '.token')" > .env
+
+services:
+  runner:
+    image: ghcr.io/actions/actions-runner:latest
+    container_name: actions-runner
+    restart: unless-stopped
+    init: true
+    command:
+      - /bin/bash
+      - -c
+      - |
+        [ -f /home/runner/.runner ] || ./config.sh \
+          --url https://github.com/$${GITHUB_NAME} \
+          --token $${RUNNER_TOKEN?} \
+          --name $${RUNNER_NAME} \
+          --labels $${RUNNER_LABELS} \
+          --runnergroup $${RUNNER_GROUP} \
+          --unattended --replace
+        exec /home/runner/run.sh
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock          # Docker socket
+      - /usr/local:/usr/local:ro                           # Host Binary
+      - /home/ubuntu/.kube:/home/runner/.kube:ro           # Host kubectl configs
+      - /home/ubuntu/.config/gh:/home/runner/.config/gh:ro # Host gh configs
+      - runner-home:/home/runner/                          # Runner Home
+    environment:
+      - GITHUB_NAME=${GITHUB_NAME:-abyss-works}
+      - RUNNER_NAME=${GITHUB_NAME:-abyss-works}
+      - RUNNER_LABELS=self-hosted,linux,arm64
+      - RUNNER_GROUP=Default
+      - DISABLE_RUNNER_UPDATE=1
+    env_file:
+      - .env
+
+volumes:
+  runner-home:
