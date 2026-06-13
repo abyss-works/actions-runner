@@ -15,6 +15,7 @@ services:
     image: ghcr.io/actions/actions-runner:latest
     container_name: actions-runner
     restart: unless-stopped
+    network_mode: host
     init: true
     command:
       - /bin/bash
@@ -31,7 +32,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock          # Docker socket
       - /usr/local:/usr/local:ro                           # Host Binary
-      - /home/ubuntu/.kube:/home/runner/.kube:ro           # Host kubectl configs
+      - /home/ubuntu/.kube/config-runner:/tmp/kubeconfig-sa:ro # SA kubeconfig
       - /home/ubuntu/.config/gh:/home/runner/.config/gh:ro # Host gh configs
       - runner-home:/home/runner/                          # Runner Home
     environment:
@@ -40,6 +41,7 @@ services:
       - RUNNER_LABELS=self-hosted,linux,arm64
       - RUNNER_GROUP=Default
       - DISABLE_RUNNER_UPDATE=1
+      - KUBECONFIG=/tmp/kubeconfig-sa
     env_file:
       - .env
 
