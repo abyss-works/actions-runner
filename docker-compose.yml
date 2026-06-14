@@ -1,45 +1,54 @@
-# GitHub Actions Runner — Docker Compose
+# GitHub Actions Runner — 통합 Docker Compose
 #
-# 환경변수 (.env):
-#   GITHUB_NAME     — GitHub name/owner (기본값: abyss-works)
-#   RUNNER_TOKEN   — 첫 등록용 1회용 토큰
+# 단일 .env 파일이 모든 환경변수를 제공합니다.
+# `docker compose up -d` 만으로 동작합니다.
 #
-# 첫 실행: GITHUB_NAME=... RUNNER_TOKEN=... dc up -d
-# 그 이후: dc up -d (runner-home volume에 credentials 유지)
+# .env 템플릿:
+#   cp .env.example .env && vi .env
+#   docker compose up -d
 #
-# RUNNER_TOKEN 발급 (1회용):
-#   echo "RUNNER_TOKEN=$(gh api --method POST /repos/${GITHUB_NAME:-abyss-works}/used-book/actions/runners/registration-token --jq '.token')" > .env
+# RUNNER_TOKEN 발급 (저장소 레벨):
+#   echo "RUNNER_TOKEN=*** api --method POST /repos/${GITHUB_ORG}/${GITHUB_REPO}/actions/runners/registration-token --jq '.token')" >> .env
+#
+# RUNNER_TOKEN 발급 (조직 레벨 — GITHUB_REPO=):
+#   echo "RUNNER_TOKEN=*** api --method POST /orgs/${GITHUB_ORG}/actions/runners/registration-token --jq '.token')" >> .env
 
 services:
   runner:
     image: ghcr.io/actions/actions-runner:latest
     container_name: actions-runner
     restart: unless-stopped
-    network_mode: host
     init: true
     command:
       - /bin/bash
       - -c
       - |
-        [ -f /home/runner/.runner ] || ./config.sh \
-          --url https://github.com/$${GITHUB_NAME} \
-          --token $${RUNNER_TOKEN?} \
-          --name $${RUNNER_NAME} \
-          --labels $${RUNNER_LABELS} \
-          --runnergroup $${RUNNER_GROUP} \
-          --unattended --replace
+        set -euo pipefail
+
+        # URL: GITHUB_REPO가 있으면 /org/repo, 없으면 /org
+        RUNNER_URL="https://github.com/$${GITHUB_ORG}$${GITHUB_REPO:+/}$${GITHUB_REPO}"
+
+        if [ ! -f /home/runner/.runner ]; then
+          RUNNER_GROUP_ARG=""
+          [ -n "$${RUNNER_GROUP:-}" ] && RUNNER_GROUP_ARG="--runnergroup $${RUNNER_GROUP}"
+
+          ./config.sh \
+            --url "$${RUNNER_URL}" \
+            --token "$${RUNNER_TOKEN?}" \
+            --name "$${RUNNER_NAME:-runner}" \
+            --labels "$${RUNNER_LABELS:-self-hosted}" \
+            $${RUNNER_GROUP_ARG} \
+            --unattended --replace
+        fi
+
         exec /home/runner/run.sh
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock          # Docker socket
-      - /usr/local:/usr/local:ro                           # Host Binary
-      - /home/ubuntu/.kube/config-runner:/tmp/kubeconfig-sa:ro # SA kubeconfig
-      - /home/ubuntu/.config/gh:/home/runner/.config/gh:ro # Host gh configs
-      - runner-home:/home/runner/                          # Runner Home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/local:/usr/local:ro
+      - /home/ubuntu/.kube/config-runner:/tmp/kubeconfig-sa:ro
+      - /home/ubuntu/.config/gh:/home/runner/.config/gh:ro
+      - runner-home:/home/runner/
     environment:
-      - GITHUB_NAME=${GITHUB_NAME:-abyss-works}
-      - RUNNER_NAME=${GITHUB_NAME:-abyss-works}
-      - RUNNER_LABELS=self-hosted,linux,arm64
-      - RUNNER_GROUP=Default
       - DISABLE_RUNNER_UPDATE=1
       - KUBECONFIG=/tmp/kubeconfig-sa
     env_file:

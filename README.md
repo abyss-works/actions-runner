@@ -27,7 +27,7 @@
    - **Repo runner:**
      ```bash
      gh api --method POST \
-       /repos/${GITHUB_NAME}/<repo>/actions/runners/registration-token \
+       /repos/${GITHUB_NAME}/${GITHUB_REPO}/actions/runners/registration-token \
        --jq '.token'
      ```
 
